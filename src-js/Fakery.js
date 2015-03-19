@@ -457,18 +457,20 @@ Fakery.FakeMethod.prototype.get = function(){
     if(this._f_new) return this._f_new;
     var me = this;
     var fxn = function(){
-        var args = Array.apply(null, arguments);
+        var args = [].slice.call(arguments)
         me.history.push(args);
-        var all_entry = me.hasAction(null);
-        if(all_entry && typeof all_entry.callback == "function") all_entry.callback(me, args);
+        var aer, all_entry = me.hasAction(null);
+        if(all_entry && all_entry.callback instanceof Function){
+            aer = all_entry.callback(me, args);
+        }
 
         var mode = me.mode() || Fakery.FakeObject.instanceOf(this) && this.mode() ||
             me._f_t instanceof Fakery.FakeObject && me._f_t.mode() || Fakery.mode;
         if(mode != Fakery.MODES.FULL){
             var entry = me.hasAction(args);
-            if(entry && typeof entry.callback == "function")
+            if(entry && entry.callback instanceof Function)
                 return entry.callback(me, args);
-            if(mode != Fakery.MODES.MASK) return null;
+            if(mode != Fakery.MODES.MASK) return aer || null;
         }
         return me._f_o.apply(me._f_t || this, args);
     };
@@ -494,6 +496,18 @@ Fakery.Function = function(){};
 Fakery.Function.prototype.__proto__ = Function.prototype;
 /** @type {Fakery.FakeMethod} */
 Fakery.Function.prototype.fake = null;
+Fakery.Function.prototype.onArgsDo = function(args, doThis){
+    //forward to FakeMethod
+    return this.fake.onArgsDo(args,doThis);
+};
+Fakery.Function.prototype.numberOfCalls = function(args){
+    //forward to FakeMethod
+    return this.fake.numberOfCalls(args);
+};
+Fakery.Function.prototype.mode = function(mode){
+    //forward to FakeMethod
+    return this.fake.mode(mode);
+};
 
 
 /* Internal utility for equality comparison, specifically for use comparing arguments. */
