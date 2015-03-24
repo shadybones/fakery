@@ -160,6 +160,11 @@ Fakery.Fake.prototype.state = function(){};
  * @param {number=} mode the mode to use when setting
  */
 Fakery.Fake.prototype.mode = function(mode){};
+/**
+ * Resets the history tracking properties of the Fake Object. Returns calls / reads / writes to 0.
+ * @param {boolean} propagate For Fake Objects, this will trigger a resetHistory call to all contained Fake Methods.
+ */
+Fakery.Fake.prototype.resetHistory = function(propagate){};
 
 
 
@@ -294,6 +299,15 @@ Fakery.FakeObject.prototype.mode = function(mode){
     if(mode==null) return this._f_mode;
     if(mode < 4)
         this._f_mode = mode;
+};
+Fakery.FakeObject.prototype.resetHistory = function(propagate){
+    this._f_read = {};
+    this._f_write = {};
+    if(propagate){
+        for(var i = this._f_innermethods.length; i-->0;){
+            this._f_innermethods[i].resetHistory(propagate);
+        }
+    }
 };
 /**
  * Define getters and setters on the Fake object to keep track of and gateway access.
@@ -446,6 +460,9 @@ Fakery.FakeMethod.prototype.mode = function(mode){
     if(mode < 4)
         this._f_mode = mode;
 };
+Fakery.FakeMethod.prototype.resetHistory = function(propagate){
+    this.history = [];
+};
 
 /**
  * Creates and returns the replacement function which wraps in scope all the actions needed when it's called.
@@ -506,6 +523,10 @@ Fakery.Function.prototype.numberOfCalls = function(args){
 Fakery.Function.prototype.mode = function(mode){
     //forward to FakeMethod
     return this.fake.mode(mode);
+};
+Fakery.Function.prototype.resetHistory = function(propagate){
+    //forward to FakeMethod
+    return this.fake.resetHistory(propagate);
 };
 
 
