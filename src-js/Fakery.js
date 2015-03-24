@@ -47,7 +47,7 @@ Fakery.on = function(fakeOb, argsOrProperty, doThis){
         fakeOb = fakeOb.fake;
     }
     if( Fakery.FakeObject.instanceOf(fakeOb) && typeof argsOrProperty.valueOf() == "string") {
-        var prop = fakeOb[argsOrProperty];
+        var prop = fakeOb._f_innermethods[argsOrProperty] || fakeOb.original()[argsOrProperty];
         if(prop instanceof Fakery.Function) {
             return prop.fake.onArgsDo(null, doThis);
         }else{
@@ -57,7 +57,7 @@ Fakery.on = function(fakeOb, argsOrProperty, doThis){
     if( fakeOb instanceof Fakery.FakeMethod && argsOrProperty instanceof Array){
         return fakeOb.onArgsDo(argsOrProperty, doThis);
     }
-    throw new Error("invalid argument types");
+    throw new Error("invalid argument types. If FakeMethod, args must be an array. If FakeObject, must be a string");
 }
 
 /**
@@ -279,17 +279,16 @@ Fakery.FakeObject.prototype.onArgsDo = function(args, doThis){
     }
 };
 Fakery.FakeObject.prototype.numberOfCalls = function(args){
-    if(typeof args == "string" && args in this._f_read){
+    if(typeof args == "string"){
         return this._f_read[args] | 0;
     }
-    if(args) throw new Error("invalid argument: "+args);
-    return 0;
+    throw new Error("invalid argument: "+args);
 };
 Fakery.FakeObject.prototype.numberOfWrites = function(args){
-    if(typeof args.valueOf() == "string"){
+    if(typeof args == "string"){
         return this._f_write[args] | 0;
     }
-    return 0;
+    throw new Error("invalid argument: "+args);
 };
 Fakery.FakeObject.prototype.mode = function(mode){
     if(mode==null) return this._f_mode;
@@ -327,9 +326,9 @@ Fakery.FakeObject.prototype.defineGettersSetters = function defineGettersSetters
             i+1 && this._f_innermethods.splice(i);
             this._f_innermethods[propertyName] = null;
 
-            if(value instanceof Fake.Function)
+            if(value instanceof Fakery.Function)
                 value = value.fake;
-            if(value instanceof Fake.FakeMethod){
+            if(value instanceof Fakery.FakeMethod){
                 //add the replacement method
                 this._f_innermethods.push(this._f_innermethods[propertyName] = value);
                 return value.get();
