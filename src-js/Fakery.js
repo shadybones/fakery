@@ -42,11 +42,11 @@ Fakery.mode = Fakery.MODES.MASK;
  * @param {Fakery.ActionCallback} doThis Callback which returns whatever you want this call to return;
  */
 Fakery.on = function(fakeOb, argsOrProperty, doThis){
-    if(!fakeOb || !argsOrProperty || !doThis) throw new Error("invalid arguments");
+    if(!fakeOb || !doThis) throw new Error("invalid arguments");
     if(fakeOb instanceof Fakery.Function) {
         fakeOb = fakeOb.fake;
     }
-    if( Fakery.FakeObject.instanceOf(fakeOb) && typeof argsOrProperty.valueOf() == "string") {
+    if( Fakery.FakeObject.instanceOf(fakeOb) && argsOrProperty!=null && typeof argsOrProperty.valueOf() == "string") {
         var prop = fakeOb._f_innermethods[argsOrProperty] || fakeOb.original()[argsOrProperty];
         if(prop instanceof Fakery.Function) {
             return prop.fake.onArgsDo(null, doThis);
@@ -54,7 +54,7 @@ Fakery.on = function(fakeOb, argsOrProperty, doThis){
             return fakeOb.onArgsDo(argsOrProperty, doThis);
         }
     }
-    if( fakeOb instanceof Fakery.FakeMethod && argsOrProperty instanceof Array){
+    if( fakeOb instanceof Fakery.FakeMethod && (argsOrProperty instanceof Array || argsOrProperty === null)){
         return fakeOb.onArgsDo(argsOrProperty, doThis);
     }
     throw new Error("invalid argument types. If FakeMethod, args must be an array. If FakeObject, must be a string");
@@ -232,11 +232,13 @@ Fakery.FakeObject.instanceOf = function isInstanceOfFakeObject(item){
  * The passed parameter's properties will be used as a 'mask' to apply to the Fake object's overrides.
  * What this means is that if a property exists on 'copy', then that property will exist on the Fake object
  * to hide access to the original object's property of the same name. If a property exists on the original
- * object which does not exist on 'copy', the accessing FakeObject.property will actually access the original
+ * object which does not exist on 'copy', then accessing FakeObject.property will actually access the original
  * object's property instead. This is useful for when you wish for some properties of the original object to be
  * directly accessible.
  *
- * Generally, 'copy' should be the original object.
+ * Generally, you shouldn't use this method, and 'copy' should be the original object. But sometimes you
+ * don't want a property of the original object on the Fake object. And sometimes you want to add properties
+ * to the Fake object you can't (or dont want to) add to the original.
  *
  * @param {Object<String,*>} copy
  * @returns {Fakery.FakeObject} this
