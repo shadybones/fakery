@@ -1,87 +1,127 @@
 Catchy = new (function Catchy(){})();
-Catchy.then = function then( dothis ){
-    return (this instanceof CaughtFunction? this : CaughtFunction(this)).then( dothis );
-};
-Catchy.catchIt = function catchIt( withthis ){
-    return (this instanceof CaughtFunction? this : CaughtFunction(this)).catchIt( withthis );
-};
-Catchy.override = function override( withthis ){
-    return (this instanceof CaughtFunction? this : CaughtFunction(this)).override( withthis );
-};
 
-function CaughtFunction(original){
-    if(!(original instanceof Function)) throw new Error("invalid argument");
-    /** @type {CaughtFunction} */
-    var me = function(){
-        var args = [].splice.apply(arguments);
-        if(me.__before__ instanceof Array){
-            for(var i = 0; i < me.__before__.length; i++){
-                try{
-                    me.__before__[i] instanceof Function && me.__before__[i].apply(this,args);
-                }catch(e){
+/** @typedef {function(Error,CaughtFunction,function,Array)} */
+Catchy.Catcher;
+/** @typedef {function} A callback which is passed the same args as the original's call, and uses the same "this" object. */
+Catchy.Callback;
+/** @type {function} */
+Catchy.defaultCatcher;
+
+(function(){
+    /** @param {!function} original */
+    function CaughtFunction(original){
+        if(!(this == window || this.window)) throw new Error("no access as constructor. do not instantiate using 'new'.");
+        if(!(original instanceof Function)) throw new Error("invalid argument");
+        if(original instanceof CaughtFunction) return original;
+
+        /** @type {CaughtFunction} */
+        var me = function(){
+            var args = [].splice.apply(arguments);
+            if(me.__before__ instanceof Array){
+                for(var i = 0; i < me.__before__.length; i++){
                     try{
-                        me.__catcher__ instanceof Function && me.__catcher__.apply(this,[e,me.__before__[i],args]);
-                    }catch(f){}
-                }
-            }
-        }
-        var result, torun = me.__override__ instanceof Function && me.__override__ || original;
-        try {
-            result = torun.apply(this, args);
-            args.push(result);
-            if (me.__after__ instanceof Array) {
-                for (var i = 0; i < me.__after__.length; i++) {
-                    try {
-                        me.__after__[i] instanceof Function && me.__after__[i].apply(this, args);
-                    } catch (e) {
+                        me.__before__[i] instanceof Function && me.__before__[i].apply(this,args);
+                    }catch(e){
                         try{
-                            me.__catcher__ instanceof Function && me.__catcher__.apply(this,[e,me.__after__[i],args]);
+                            me.__catcher__ instanceof Function && me.__catcher__.apply(this,[e,me,me.__before__[i],args]);
                         }catch(f){}
                     }
                 }
             }
-        }catch (e){
-            try{
-                me.__catcher__ instanceof Function && me.__catcher__.apply(this,[e,torun,args]);
-            }catch(f){}
-        }
-        return result;
-    };
-    me.__proto__ = CaughtFunction.prototype;
-    me.__original__ = original;
-    return me;
-};
-CaughtFunction.prototype.then = function cf_then( dothis ){
-    if(!(dothis instanceof Function)) throw new Error("invalid argument");
-    (this.__after__ = (this.__after__ || [])).push( dothis );
-    return this;
-};
-CaughtFunction.prototype.catchIt = function cf_catchIt( withthis ){
-    if(!(withthis instanceof Function)) throw new Error("invalid argument");
-    this.__catcher__ = withthis;
-    return this;
-};
-CaughtFunction.prototype.override = function cf_override( withthis ){
-    if(!(withthis instanceof Function)) throw new Error("invalid argument");
-    this.__override__ = withthis;
-    return this;
-};
-CaughtFunction.prototype.first = function cf_override( dothis ){
-    if(!(dothis instanceof Function)) throw new Error("invalid argument");
-    (this.__before__ = (this.__before__ || [])).push( dothis );
-    return this;
-};
-/** @type {Function} */
-CaughtFunction.prototype.__original__;
-/** @type {Function} */
-CaughtFunction.prototype.__override__;
-/** @type {Function} */
-CaughtFunction.prototype.__catcher__;
-/** @type {Array<Function>} */
-CaughtFunction.prototype.__before__;
-/** @type {Array<Function>} */
-CaughtFunction.prototype.__after__;
+            var result, torun = me.__override__ instanceof Function && me.__override__ || original;
+            try {
+                result = torun.apply(this, args);
+                args.push(result);
+                if (me.__after__ instanceof Array) {
+                    for (var i = 0; i < me.__after__.length; i++) {
+                        try {
+                            me.__after__[i] instanceof Function && me.__after__[i].apply(this, args);
+                        } catch (e) {
+                            try{
+                                me.__catcher__ instanceof Function && me.__catcher__.apply(this,[e,me,me.__after__[i],args]);
+                            }catch(f){}
+                        }
+                    }
+                }
+            }catch (e){
+                try{
+                    me.__catcher__ instanceof Function && me.__catcher__.apply(this,[e,me,torun,args]);
+                }catch(f){}
+            }
+            return result;
+        };
+        me.__proto__ = CaughtFunction.prototype;
+        me.__original__ = original;
 
-CaughtFunction.prototype.__proto__ = Function.prototype;
+        if(original.name) {
+            if(window[original.name] === original){
+                window[original.name] = me;
+            }
+            if(self[original.name] === original){
+                self[original.name] = me;
+            }
+        }
+
+        return me;
+    };
+    CaughtFunction.prototype.then = function cf_then( dothis ){
+        if(!(dothis instanceof Function)) throw new Error("invalid argument");
+        (this.__after__ = (this.__after__ || [])).push( dothis );
+        return this;
+    };
+    CaughtFunction.prototype.catch = function cf_catch( withthis ){
+        if(!(withthis instanceof Function)) throw new Error("invalid argument");
+        this.__catcher__ = withthis;
+        return this;
+    };
+    CaughtFunction.prototype.override = function cf_override( withthis ){
+        if(!(withthis instanceof Function)) throw new Error("invalid argument");
+        this.__override__ = withthis;
+        return this;
+    };
+    CaughtFunction.prototype.first = function cf_first( dothis ){
+        if(!(dothis instanceof Function)) throw new Error("invalid argument");
+        (this.__before__ = (this.__before__ || [])).push( dothis );
+        return this;
+    };
+    CaughtFunction.prototype.toString = function toString(){
+        return "CaughtFunction {" +
+            (this.__catcher__ ? "hasCatcher, " : "" ) +
+            (this.__override__ ? "hasOverride, " : "" ) +
+            (this.__before__ ? "runBefore:"+this.__before__.length+", " : "" ) +
+            (this.__after__ ? "runAfter:"+this.__after__.length+", " : "" ) +
+            (this.__original__ ? (this.__original__.name ? this.__original__.name : "hasOriginal") : "" ) +
+            "}";
+    };
+    /** @type {Function} */
+    CaughtFunction.prototype.__original__;
+    /** @type {Catchy.Callback} */
+    CaughtFunction.prototype.__override__;
+    /** @type {Catchy.Catcher} */
+    CaughtFunction.prototype.__catcher__;
+    /** @type {Array<Catchy.Callback>} */
+    CaughtFunction.prototype.__before__;
+    /** @type {Array<Catchy.Callback>} */
+    CaughtFunction.prototype.__after__;
+
+    CaughtFunction.prototype.__proto__ = Function.prototype;
+
+    /** @param {!Catchy.Callback} dothis */
+    Catchy.then = function then( dothis ){
+        return CaughtFunction(this).then( dothis );
+    };
+    /** @param {!Catchy.Catcher} withthis */
+    Catchy.catch = function catchIt( withthis ){
+        return CaughtFunction(this).catch( withthis || Catchy.defaultCatcher );
+    };
+    /** @param {!Catchy.Callback} withthis */
+    Catchy.override = function override( withthis ){
+        return CaughtFunction(this).override( withthis );
+    };
+    /** @param {!Catchy.Callback} dothis */
+    Catchy.first = function first( dothis ){
+        return CaughtFunction(this).first( dothis );
+    };
+})();
 Function.prototype.__proto__ = Catchy;
 
