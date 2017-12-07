@@ -1,0 +1,32 @@
+{
+  "name": "fakery-js",
+  "version": "0.1.1",
+  "description": "A javascript library for mocking, wrapping DOM elements and JS APIs for unit testing. The idea is that you can use the real DOM /runtime, but just customize that one field you need for the unit test.",
+  "main": "src-js/main.js",
+  "files": [
+    "src-js/",
+    "dist/"
+  ],
+  "scripts": {
+    "test": "node ./src-test/Stately.test.js"
+  },
+  "devDependencies": {
+    "grunt": "1.0.1",
+    "grunt-contrib-uglify": "3.2.1",
+    "js-observables": "git+https://github.com/shadybones/js-observables.git#0.1.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shadybones/fakery.git"
+  },
+  "keywords": [
+    "unit test",
+    "testing",
+    "tests"
+  ],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/shadybones/fakery/issues"
+  },
+  "homepage": "https://github.com/shadybones/fakery#readme"
+}

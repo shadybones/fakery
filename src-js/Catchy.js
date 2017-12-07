@@ -63,10 +63,14 @@ Catchy.defaultCatcher;
         }
 
         return me;
-    };
-    CaughtFunction.prototype.then = function cf_then( dothis ){
+    }
+
+    CaughtFunction.prototype.then = function cf_then( dothis , onError){
         if(!(dothis instanceof Function)) throw new Error("invalid argument");
         (this.__after__ = (this.__after__ || [])).push( dothis );
+
+        if(onError) this.catch(onError);
+
         return this;
     };
     CaughtFunction.prototype.catch = function cf_catch( withthis ){
@@ -75,7 +79,7 @@ Catchy.defaultCatcher;
         return this;
     };
     CaughtFunction.prototype.override = function cf_override( withthis ){
-        if(!(withthis instanceof Function)) throw new Error("invalid argument");
+        if(!(withthis instanceof Function) && withthis !== undefined) throw new Error("invalid argument");
         this.__override__ = withthis;
         return this;
     };
@@ -93,6 +97,8 @@ Catchy.defaultCatcher;
             (this.__original__ ? (this.__original__.name ? this.__original__.name : "hasOriginal") : "" ) +
             "}";
     };
+
+    //Declarations for IDE, but not accurate.
     /** @type {Function} */
     CaughtFunction.prototype.__original__;
     /** @type {Catchy.Callback} */
@@ -122,6 +128,56 @@ Catchy.defaultCatcher;
     Catchy.first = function first( dothis ){
         return CaughtFunction(this).first( dothis );
     };
+    /** @return {Promise} **/
+    Catchy.promisify = function promisify( bind ){
+        var me = this;
+        return function(){
+            var error = null;
+            try{
+                result = me.apply(bind || this, arguments);
+            }catch(e){
+                error = e;
+            }
+            if(typeof Promise != "undefined" && Promise instanceof Function && 0){
+                return new Promise(function(resolve, reject){ if (error) reject(error); else resolve(result); });
+            }else if(typeof $ != "undefined" && $ instanceof Function && $.Deferred instanceof Function && 0){
+                var def = $.Deferred(),
+                    prom = def.promise();
+                if(error){
+                    def.reject(error);
+                }else def.resolve(result);
+                prom.finally = prom.always;
+                prom.catch = prom.fail;
+                return prom;
+            }else{
+                prom = {
+                    then: function ( s, f){
+                        if(error) f(error);
+                        else{
+                            try{
+                                s(result);
+                            }catch( e ){
+                                f && f instanceof Function && f(error = e);
+                            }
+                        }
+                        return prom;
+                    },
+                    catch : function (f) {
+                        if(error && f && f instanceof Function) f(error);
+                        return prom;
+                    },
+                    finally : function (f) {
+                        f && f instanceof Function && f();
+                        return prom;
+                    }
+                };
+                return prom;
+            }
+        }
+    };
+
 })();
 Function.prototype.__proto__ = Catchy;
 
+if(typeof define != "undefined") define("Catchy", function(){return Catchy;});
+else if(typeof exports != "undefined") exports.Catchy = Catchy;

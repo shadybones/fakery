@@ -552,3 +552,6 @@ Fakery.util_eq = function util_eq(a,b){
     }
     return true;
 };
+
+if(typeof define != "undefined") define("Fakery", function(){return Fakery;});
+else if(typeof exports != "undefined") exports.Fakery = Fakery;

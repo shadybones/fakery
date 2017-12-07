@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Test page. Load this in any browser.</title>
+    <script src="test-asserts.js"></script>
+    <script>
+        var CATCHY  = "Catchy",
+            FAKERY  = "Fakery",
+            TESTY   = "Testy",
+            STATELY = "Stately",
+            TEST    = ".test";
+
+        loadScript(CATCHY);
+        loadScript(FAKERY);
+        loadScript(TESTY);
+        loadScript(STATELY);
+
+        test = window.test || [];
+
+        if(window.location.hash && window.location.hash.match(/autorun/)){
+            startTest(CATCHY,render);
+            startTest(FAKERY,render);
+            startTest(TESTY,render);
+            startTest(STATELY,render);
+        }
+
+        function loadScript(src, params){
+            if(!src.match(/\.js$/)) src+=".js";
+
+            if(params){
+                src += "?"+params;
+            }
+
+            var el = document.createElement("script");
+            el.src = src;
+            document.head.appendChild(el);
+        }
+        function Test(name, render){
+            if(Test.__cache[name]) return Test.__cache[name];
+
+            this.name = name;
+            this.isRunning = false;
+            this.isComplete = false;
+            this.hasRendered = false;
+            /** @type {Array<TestResult>} */
+            this.result = [];
+            this.onDone = function(){};
+            this.onRender = render || this.onDone;
+            this._startTime = 0;
+            Test.__cache[name] = this;
+        }
+        Test.prototype.done = function(){
+            this.isComplete = true;
+            this.isRunning = false;
+            this._endTime = Date.now();
+            this.onDone(this);
+        };
+        Test.prototype.start = function(){
+            this.isRunning = true;
+            this.hasRendered = false;
+            this.isComplete = false;
+            this._startTime = Date.now();
+        };
+        Test.__cache = {};
+
+        function startTest(testName, callback){
+            var name = testName;
+            if(test[name] && !test[name].isComplete) return;
+            if(test[name]){
+                var i = 1;
+                while(test[name+i]){i++;}
+                name += i;
+            }
+            var test1 = test[name] = new Test(name, render);
+            test1.onDone = callback || test1.onDone;
+            window.console.log("starting test",testName, "with name", name);
+            loadScript(testName + TEST, "name="+name);
+            window["_test"+testName] = name;
+            test1.start();
+        }
+        /**
+         *
+         * @param test {Test}
+         */
+        function render(test){
+            if(test.hasRendered) return;
+            viewResult(test);
+            generateHeader(test);
+            test.hasRendered = true;
+        }
+
+        /**
+         * @param test {Test}
+         */
+        function generateHeader(test){
+            var cont = document.createElement("div");
+            cont.addEventListener("click",function(){
+                viewResult(test);
+                cont.style.backgroundColor = "#fafafa";
+            });
+            cont.innerHTML = "<span>"+test.name+"</span>"+'<span style="float:right;background:tomato;">'+countBad(test.result)+'</span>'+'<span style="float:right;background:lawngreen;">'+countGood(test.result)+'</span>';
+            cont.style.margin = "2px 3px";
+            cont.style.backgroundColor = "#fafafa";
+            cont.style.cursor = "pointer";
+            document.getElementById("testlist").appendChild(cont);
+
+            function countGood(/*Array<TestResult>*/results){
+                var count = 0;
+                for(var i = results.length; i-->0;){
+                    if(!results[i].error && results[i].testname) count++;
+                }
+                return count || "";
+            }
+            function countBad(/*Array<TestResult>*/results){
+                var count = 0;
+                for(var i = results.length; i-->0;){
+                    if(results[i].error) count++;
+                }
+                return count || "";
+            }
+        }
+        /**
+         * @param cont {Element}
+         * @param result {TestResult}
+         */
+        function generateEntry(cont, result){
+            var name = document.createElement("div"),
+                desc = document.createElement("div"),
+                val = document.createElement("div"),
+                error = document.createElement("div");
+
+//            name.style.width = "250px";
+//            desc.style.width = "250px";
+//            val.style.width = "100px";
+//            error.style.width = "400px";
+
+            name.style.marginRight = desc.style.marginRight = val.style.marginRight = "15px";
+            name.style.flex="1";
+            desc.style.flex="3";
+            val.style.flex="1";
+            result.error && (error.style.flex="6");
+
+            cont.style.display = "flex";
+            cont.style.padding= "5px 10px";
+            cont.style.backgroundColor = result.error ? "tomato" : "lawngreen";
+
+            name.innerHTML = result.testname || " ";
+            desc.innerHTML = result.desc || " ";
+            val.innerHTML = result.value instanceof Object ? JSON.stringify(result.value) : result.value;
+            result.error && (error.innerHTML = result.error + "<br>"+ (result.errorSource || ""));
+
+            if(result.error){
+                cont.appendChild(error);
+            }else{
+                cont.appendChild(name);
+                cont.appendChild(desc);
+                cont.appendChild(val);
+            }
+
+        }
+        /**
+         *
+         * @param test {Test}
+         */
+        function viewResult(test){
+            var results = test.result;
+            var cont, list = document.getElementById("results");
+            var headers = document.getElementById("testlist").children;
+            for (var i = 0; i < headers.length; i++){
+                headers[i].style.backgroundColor = "#ededed";
+            }
+            list.innerHTML = " ";
+            for (i = 0; i < results.length; i++){
+                cont = document.createElement("div");
+                cont.setAttribute("style","width:100%;margin:1px 20px;");
+                list.appendChild(cont);
+                generateEntry(cont, results[i]);
+            }
+        }
+    </script>
+</head>
+<body>
+
+<button onclick=" startTest(CATCHY,render);">start test : Catchy</button>
+<button onclick=" startTest(FAKERY,render);">start test : Fakery</button>
+<button onclick=" startTest(TESTY,render);">start test : Testy.js</button>
+<button onclick=" startTest(STATELY,render);">start test : Stately</button>
+
+
+<div style="position:fixed;top:30px;left:0;width:130px;height:100%;z-index:1;background-color: gainsboro;">
+    <div style="text-align: center;">Tests</div>
+    <div id="testlist">
+
+    </div>
+</div>
+<div style="position:absolute;top:30px;left:130px;">
+    <div style="width:1000px" id="results"></div>
+</div>
+
+</body>
+</html>
