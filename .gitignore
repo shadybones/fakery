@@ -1,3 +1,7 @@
-.*
-!.gitignore
-/node_modules/
+node_modules/
+
+# Editor, OS and tool folders
+.idea/
+.vscode/
+.claude/
+.DS_Store

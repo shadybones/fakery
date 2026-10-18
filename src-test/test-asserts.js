@@ -1,159 +1,182 @@
-(function() {
+/**
+ * @file Minimal assertion helpers for the test files in this folder. They work both in the
+ * browser harness (test.html) and under Node (run-node.js).
+ *
+ * Each assertion records a TestResult into the current test object's `result` array. Set the
+ * current test with `assert.testing(name, testOb)`, or group assertions with
+ * `assert.group(name, testOb, body)`. A failed assertion is also logged with console.error.
+ */
+(function () {
+    "use strict";
+
     /**
-     * Test that the truth value is truthy. IF no description, then this
-     * is assumed to be a chain assert and will return a chain object
-     * instead of running the test.
+     * Records whether `truth` is truthy. With no description this is a chain assertion: it
+     * records nothing and returns an object with `equals`, so `assert(1).equals(2, "d")` is the
+     * same as `assertEquals(1, 2, "d")`.
      *
-     * assert(1).equals(2, "test1")
-     * is equivalent to
-     * assertEquals(1,2,"test1")
-     *
-     * @param truth {Boolean}
-     * @param desc {String=} A description of the current test. If absent, this is assumed to be a chain assert
-     * @param testname {String=} The name of this test. Generally the class and method it's testing.
-     * @param testOb {Object=} The Test object (has ob.results[])
-     * @param errorInfo {*} data to add to the error print out, if assert fails
-     * @returns {{testname: (*|String), testOb: (*|Object), value: *, equals: equals}}
+     * @param {*} truth
+     * @param {string=} desc What is being checked. Omit it to start a chain assertion.
+     * @param {string=} testname The test's name; defaults to the one set by assert.testing.
+     * @param {Object=} testOb The test object (has `result[]`); defaults to the one set by assert.testing.
+     * @param {*=} errorInfo Extra detail for the failure message.
+     * @returns {(undefined|{testname: string, testOb: Object, value: *, equals: Function})}
      */
     function assert(truth, desc, testname, testOb, errorInfo) {
         testname = testname || assert._testname;
         testOb = testOb || assert._testOb;
 
-        if (desc !== undefined) {  //normal assert true
-            if (!truth) {
-                var e = new Error((testname ? ("Testing " + testname + ":  ") : '') + (errorInfo || "This was not true") +". "+ desc);
-                self.console && self.console.error(e);
-            }
-            if (testOb) {
-                testOb.result.push(new TestResult(truth, desc, testname, e));
-            }
-        }
-        else { //chain assert
+        if (desc === undefined) {
             return {
                 testname: testname,
                 testOb: testOb,
                 value: truth,
-                equals: function (a, desc) {
-                    return assertEquals.call(this, a, undefined, desc);
+                equals: function (expected, description) {
+                    assertEquals(this.value, expected, description, this.testname, this.testOb);
                 }
+            };
+        }
+        let error;
+        if (!truth) {
+            error = new Error((testname ? "Testing " + testname + ":  " : "") + (errorInfo || "This was not true") + ". " + desc);
+            if (typeof console !== "undefined") {
+                console.error(error);
             }
         }
-    }
-
-    /**
-     * Tests for equality of structure and values;
-     * @param a {*}
-     * @param b {*}
-     * @param desc {String=} A description of the current test
-     * @param testname {String=} The name of this test. Generally the class and method it's testing.
-     * @param testOb {Object=} The Test object (has ob.results[])
-     */
-    function assertEquals(a, b, desc, testname, testOb) {
-        if (b === undefined) { //chain
-            b = a;
-            a = this.value;
-            testname = this.testname;
-            testOb = this.testOb;
+        if (testOb) {
+            testOb.result.push(new TestResult(truth, desc, testname, error));
         }
-        assert(assert._equals(a, b), desc || "Was Equal", testname, testOb, "Expected: "+(b instanceof Object ? JSON.stringify(b):b) +", but got: "+(a instanceof Object ? JSON.stringify(a):a));
     }
 
     /**
-     * For testing a function which is supposed to throw an exception
-     * @param fun {Function} The function which is supposed to throw an exception when called.
-     * @param desc {String=} A description of the current test
-     * @param testname {String=} The name of this test. Generally the class and method it's testing.
-     * @param testOb {Object=} The Test object (has ob.results[])
+     * Records whether `actual` and `expected` are equal in structure and value (see _equals).
+     * @param {*} actual
+     * @param {*} expected
+     * @param {string=} desc
+     * @param {string=} testname
+     * @param {Object=} testOb
+     */
+    function assertEquals(actual, expected, desc, testname, testOb) {
+        assert(_equals(actual, expected), desc || "Was Equal", testname, testOb,
+            "Expected: " + describe(expected) + ", but got: " + describe(actual));
+    }
+
+    /**
+     * Records whether `fun` throws when called.
+     * @param {Function} fun
+     * @param {string=} desc
+     * @param {string=} testname
+     * @param {Object=} testOb
+     * @throws {Error} If `fun` is not a function.
      */
     function assertThrows(fun, desc, testname, testOb) {
-        if (fun instanceof Function) {
-            try {
-                fun();
-                assert(false, desc || "Didn't Throw", testname, testOb);
-            } catch (e) {
-                assert(true, desc || "Threw", testname, testOb);
-            }
-        } else {
+        if (typeof fun !== "function") {
             throw new Error("Illegal Args. Requires a function");
         }
+        let threw = false;
+        try {
+            fun();
+        } catch (e) {
+            threw = true;
+        }
+        assert(threw, desc || (threw ? "Threw" : "Didn't Throw"), testname, testOb, "Expected an exception");
+    }
+
+    function describe(value) {
+        if (value instanceof Object && typeof value !== "function") {
+            try {
+                return JSON.stringify(value);
+            } catch (circular) {
+                return String(value);
+            }
+        }
+        return String(value);
     }
 
     /**
-     * a generous equality - equality of structure and values
-     * @param a {*}
-     * @param b {*}
+     * Generous equality of structure and value. Objects must have the same prototype and the same
+     * own enumerable keys, in any order. Values with their own `equals` method use it.
+     * @param {*} a
+     * @param {*} b
      * @returns {boolean}
-     * @private
      */
     function _equals(a, b) {
-        if (a === b) return true;
-        if (typeof a != typeof b) return false;
+        if (a === b || a !== a && b !== b) return true;
+        if (a === null || b === null || typeof a !== typeof b || typeof a !== "object") return false;
         if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false;
-        if (a.equals && b.equals) return a.equals(b);
+        if (typeof a.equals === "function" && typeof b.equals === "function") return a.equals(b);
+        if (a instanceof RegExp || a instanceof Date) return a.toString() === b.toString();
         if (Array.isArray(a)) {
-            if (a.length != b.length) return false;
-            for (var i = a.length; i-- > 0;) {
-                if (!assert._equals(a[i], b[i])) return false;
+            if (a.length !== b.length) return false;
+            for (let i = a.length; i-- > 0;) {
+                if (!_equals(a[i], b[i])) return false;
             }
             return true;
-        } else if (a instanceof RegExp || a instanceof Date) {
-            return a.toString() == b.toString();
-        } else if (a instanceof Object) {
-            var keys = Object.keys(a);
-            if (keys.join('$') != Object.keys(b).join('$')) return false;
-            for (i = keys.length; i-- > 0;) {
-                if (!assert._equals(a[keys[i]], b[keys[i]])) return false;
-            }
-            return true;
-        } else return false;
+        }
+        const keys = Object.keys(a).sort();
+        if (keys.join("$") !== Object.keys(b).sort().join("$")) return false;
+        return keys.every(function (key) {
+            return _equals(a[key], b[key]);
+        });
     }
 
     /**
-     *
-     * @param value {*}
-     * @param desc {String}
-     * @param testname {String}
-     * @param error {Error=}
+     * One recorded assertion.
+     * @param {*} value The asserted value.
+     * @param {string} desc
+     * @param {string} testname
+     * @param {Error=} error Present if the assertion failed.
      * @constructor
      */
-    function TestResult(value, desc, testname, error){
+    function TestResult(value, desc, testname, error) {
         this.value = value;
         this.desc = desc;
         this.testname = testname;
         this.error = error;
-
-        if(error){
-            var match = error.stack.match(/at <[^>]+>:\d+:\d+\s*(at <([^>]+)>:(\d+):(\d+))/),
-                top = error.stack.substring(error.stack.lastIndexOf("at "));
-            this.errorSource = top;
+        if (error && error.stack) {
+            // The last stack frame points at the test file's call site in most browsers.
+            this.errorSource = error.stack.substring(error.stack.lastIndexOf("at "));
         }
     }
 
     /**
-     * Set the default test name and test ob.
-     * @param desc {String} The name of this test. Generally the class and method it's testing.
-     * @param testOb {Object=} The Test object (has ob.results[])
+     * Sets the default test name and test object for the assertions that follow.
+     * @param {string} desc The test's name, usually the class and method under test.
+     * @param {Object=} testOb The test object (has `result[]`). Left unchanged if omitted.
      */
-    assert.testing = function(desc, testOb){
+    assert.testing = function (desc, testOb) {
         assert._testname = desc;
-        testOb!==undefined && (assert._testOb = testOb);
+        if (testOb !== undefined) {
+            assert._testOb = testOb;
+        }
     };
-    assert.testing.release = function(){ assert.testing("",null); };
+    assert.testing.release = function () {
+        assert.testing("", null);
+    };
+
+    /**
+     * Runs `body` with `name` as the current test. If `body` throws, records a failure rather than
+     * aborting the rest of the file.
+     * @param {string} name
+     * @param {Object} testOb
+     * @param {Function} body
+     */
+    assert.group = function (name, testOb, body) {
+        assert.testing(name, testOb);
+        try {
+            body();
+        } catch (e) {
+            assert(false, "threw " + (e && e.stack || e), name, testOb, "Unexpected exception");
+        }
+    };
     assert._equals = _equals;
 
-    if(typeof define == 'function'){
-        define(function(){
-            return {
-                assert : assert,
-                assertEquals : assertEquals,
-                assertThrows : assertThrows
-            }
+    const api = { assert: assert, assertEquals: assertEquals, assertThrows: assertThrows };
+    if (typeof define === "function" && define.amd) {
+        define(function () { return api; });
+    } else {
+        const target = typeof exports !== "undefined" ? exports : self;
+        Object.keys(api).forEach(function (name) {
+            target[name] = api[name];
         });
-    }else{
-        var exp = typeof exports != 'undefined' ? exports : self;
-        exp.assert = assert;
-        exp.assertEquals = assertEquals;
-        exp.assertThrows = assertThrows;
     }
-
-})();
+}());

@@ -2,29 +2,39 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Test page. Load this in any browser.</title>
+    <title>Fakery tests</title>
+    <!--
+        Browser test harness. Open this file in any browser and press a button, or open it with
+        "#autorun" at the end of the URL to run every suite. The libraries load from ../src-js/;
+        each suite is <Name>.test.js in this folder. The same suites run under Node with `npm test`.
+    -->
     <script src="test-asserts.js"></script>
     <script>
         var CATCHY  = "Catchy",
             FAKERY  = "Fakery",
             TESTY   = "Testy",
-            STATELY = "Stately",
+            LIB     = "../src-js/",
             TEST    = ".test";
 
-        loadScript(CATCHY);
-        loadScript(FAKERY);
-        loadScript(TESTY);
-        loadScript(STATELY);
+        loadScript(LIB + CATCHY);
+        loadScript(LIB + FAKERY);
+        loadScript(LIB + TESTY);
 
         test = window.test || [];
 
-        if(window.location.hash && window.location.hash.match(/autorun/)){
-            startTest(CATCHY,render);
-            startTest(FAKERY,render);
-            startTest(TESTY,render);
-            startTest(STATELY,render);
-        }
+        // Wait for the page, so the helpers below exist and the result panes are in the DOM.
+        document.addEventListener("DOMContentLoaded", function(){
+            if(window.location.hash && window.location.hash.match(/autorun/)){
+                startTest(CATCHY,render);
+                startTest(FAKERY,render);
+                startTest(TESTY,render);
+            }
+        });
 
+        /**
+         * Adds a script tag. Scripts run in the order they were added (async = false), so each
+         * test suite runs after the libraries it needs.
+         */
         function loadScript(src, params){
             if(!src.match(/\.js$/)) src+=".js";
 
@@ -34,6 +44,7 @@
 
             var el = document.createElement("script");
             el.src = src;
+            el.async = false;
             document.head.appendChild(el);
         }
         function Test(name, render){
@@ -184,8 +195,7 @@
 
 <button onclick=" startTest(CATCHY,render);">start test : Catchy</button>
 <button onclick=" startTest(FAKERY,render);">start test : Fakery</button>
-<button onclick=" startTest(TESTY,render);">start test : Testy.js</button>
-<button onclick=" startTest(STATELY,render);">start test : Stately</button>
+<button onclick=" startTest(TESTY,render);">start test : Testy</button>
 
 
 <div style="position:fixed;top:30px;left:0;width:130px;height:100%;z-index:1;background-color: gainsboro;">
