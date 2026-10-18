@@ -1,51 +1,79 @@
-//Override one method / property, but let other calls/property return as if from the original
+/*
+ A tour of Fakery's features, in a browser. Each section stands alone; the comments give the
+ value each expression evaluates to.
+ */
+
+// --- Override one property or method; everything else behaves as normal (MASK mode, the default)
 self = Fakery(self);
-Fakery.on(self,"name",function(a,b){return "my_name";});
-Fakery.on(self.eval, null, function(a,b){ return "i dont think so"; });
+Fakery.on(self, "name", function (fake, args) { return "my_name"; });
+Fakery.on(self, "eval", function (fakeMethod, args) { return "i dont think so"; });
+self.name;                 // "my_name"
+self.eval("1 + 1");        // "i dont think so"
+self.location.href;        // the real URL
+self = Fakery.unwrap(self);
 
-//OR, make everything return null except what you specifically override
-Fakery.mode = Fakery.MODES.HOLLOW;
+// --- Only record; override nothing (FULL mode)
+const watched = Fakery(window).mode(Fakery.MODES.FULL);
+const fakeDoc = Fakery(document);
+watched.onArgsDo("document", function (fake, args) { return fakeDoc; });  // ignored in FULL mode
+watched.document === document;                       // true: FULL mode ignores overrides
+watched.numberOfCalls("document");                   // 1
+fakeDoc.getElementById("something");
+fakeDoc.getElementById.numberOfCalls();              // 1
+fakeDoc.getElementById.fake.history;                 // [["something"]]
 
-//OR dont override anything because you just want to keep track of access, not override
-self = Fakery(window);
-var fakeDoc = Fakery(document);
-self.onArgsDo("document",function(a,b){ return fakeDoc;  });
-self.document.getElementById("something");
-self.document.getElementById.numberOfCalls() == 1;
-self.document.getElementById.fake.history == [["something"]];
+// --- Override a method only for certain arguments
+fakeDoc.getElementById.onArgsDo(["my-id"], function (fakeMethod, args) { return { id: "fake" }; });
+fakeDoc.getElementById("my-id");                     // {id: "fake"}
+fakeDoc.getElementById("other");                     // the real element, or null
 
-//Only override a method when it matches certain args
-self.document.getElementById.onArgsDo(["my-id"],function(a,b){ var fakeResult = []; return fakeResult; });
+// --- OR handle every call yourself, and pass some through
+fakeDoc.getElementById.onArgsDo(null, function (fakeMethod, args) {
+    if (args[0] === "my-id") {
+        return { id: "fake" };
+    }
+    return document.getElementById.apply(document, args);
+});
 
-//OR do it yourself manually
-self.document.getElementById.onArgsDo(null,
-    //a = fake object, b = args
-    function(a,b){
-        if(b[0]=="my-id") {
-            var fakeResult = [];
-            return fakeResult;
-        }else return document.getElementById.apply(document,b);
-    });
+// --- Change the mode
+Fakery.mode = Fakery.MODES.HOLLOW;                   // globally: hide everything not overridden
+const hollowDoc = Fakery(document);
+hollowDoc.title;                                     // null
+hollowDoc.getElementById("x");                       // null
+hollowDoc.mode(Fakery.MODES.MASK);                   // on one fake only
+hollowDoc.title;                                     // the real title
+Fakery.mode = Fakery.MODES.MASK;                     // back to the default
 
-//Change the Fakery Mode (see Fakery.js comments for details)
-Fakery.mode = Fakery.MODES.HOLLOW; //Globally
-self = Fakery(self);
-self.mode(Fakery.MODES.MASK); //On one Fake object only
+// --- Expose only some members, e.g. so the fake can be serialised
+JSON.stringify(window);                              // throws: window has cycles
+const partial = new Fakery.FakeObject(window).applyProperties({ name: 1, innerWidth: 1 });
+JSON.stringify(partial);                             // '{"name":"...","innerWidth":...}'
+partial.location === location;                       // true: unlisted members are still readable, just not intercepted
 
-//Hide properties or methods on an object for tests
-JSON.stringify(self); //ERROR!!!!
-self = new FakeObject(window).applyProperties({var_I_care_about:1, other_var_I_care_about:2});
-JSON.stringify(self); // OK!!
+// --- Add members to the fake without touching the original
+const fakeStorage = Fakery(window.localStorage);      // say localStorage holds {var1: "sdf", var2: "1234"}
+fakeStorage.applyProperties({ var4: 1 });
+fakeStorage.onArgsDo("var3", function (fake, args) { return "I got it"; });
+fakeStorage.var3;                                    // "I got it"
+fakeStorage.var4;                                    // undefined: the original has no var4 (null in HOLLOW mode)
+fakeStorage.var1;                                    // "sdf"
+"var3" in window.localStorage;                       // false: the real storage is untouched
 
-//Add properties to the fake object that look like they are on the original
-var fakeLocalStorage = Fakery(window.localStorage);
-window.localStorage == {var1:"sdf", var2:1234};
-fakeLocalStorage.applyProperties({var4:1});
-fakeLocalStorage.onArgsDo("var3",function(a,b){return "I got it";});
-window.localStorage == {var1:"sdf", var2:1234};
-fakeLocalStorage.var4 === null ;//(NOT undefined)
-fakeLocalStorage.var3 == "I got it";
-fakeLocalStorage.var2 == 1234;
-fakeLocalStorage.var1 == "sdf";
-Fakery.on(self,"localStorage",function(a,b){return fakeLocalStorage;});
+// --- Make an API look missing (for feature-detection code)
+const noFetch = Fakery(window);
+noFetch.onArgsDo("fetch", function (fake, args) { return undefined; });
+typeof noFetch.fetch;                                // "undefined"
 
+// --- Return a fixed value: pass it instead of a callback
+const fixedDoc = Fakery(document);
+fixedDoc.onArgsDo("title", "Test title");
+fixedDoc.getElementById.onArgsDo(["missing"], null);
+fixedDoc.title;                                      // "Test title"
+fixedDoc.getElementById("missing");                  // null
+
+// --- Replace a method on the fake only
+const stubbed = Fakery(document);
+stubbed.querySelector = function (selector) { return null; };
+stubbed.querySelector("body");                       // null
+document.querySelector("body");                      // the real body: the original is untouched
+stubbed.querySelector.numberOfCalls();               // 1

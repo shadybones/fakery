@@ -1,69 +1,71 @@
 /*
- Fakery wraps javascript objects and functions with a "proxy" which allows you to control what is returned
- by property references and function calls.
+ Basic usage: faking a browser global for one test.
 
- This is because sometimes you don't have control over the global objects your tests use, and you don't want
- to pollute your code by "hacking" it.
+ Fakery wraps a JavaScript object or function in a fake. The fake controls what property reads
+ and function calls return, and records them.
 
- The most useful case is for use with "document" or browser controlled JS API calls (like "navigator" methods).
- To use this, it's good if you understand that in browsers and most other JS runtimes,
- "self" is a reference to "window" (the global object), and therefore interchangeable:
-   self == window
-   window.document == self.document
+ It is useful when the code under test reads globals you do not control, and you do not want to
+ change that code just to make it testable. The main case is `document`, or a browser API such
+ as `navigator`.
 
- Also, accessing variables that exist on the global object can be done in two ways: with or without referencing "window".
-   for example:
-      navigator == window.navigator
-      addEventListener == window.addEventListener
+ Browsers will not let you replace those globals. These do nothing, or throw in strict mode:
+   window.document = someFakeObject;
+   window.document = Fakery(window.document);
 
- However, "window.document" and "window.navigator", and event "window.window" CANNOT BE REPLACED
- So you cannot do:
-   window.document = {some_fake_object};
-   window.doument = Fakery(window.document);
+ But `self` can be replaced. In a page, `self` is the global object (`self === window`), so these
+ are the same object:
+   self.document === window.document === document
 
- Therefore if you wish to use Fakery in your tests on GLOBAL BROWSER OBJECTS, you must change the references in
- your source code to use "self" instead of "window". This way, the code will always work the way you want it to:
- it will use "window" while in production, and use a Fakery object while in tests.
-
- Example:
+ So write the code under test to reach browser globals through `self`:
    old source code:
-     var agent = window.navigator.userAgent;
-     var myElement = document.getElementById("the_id");
+     const agent = window.navigator.userAgent;
+     const myElement = document.getElementById("the_id");
    new source code:
-     var agent = self.navigator.userAgent;
-     var myElement = self.document.getElementById("the_id");
-   and then just set "self" as your Fake object:
-     self = Fakery(window);
+     const agent = self.navigator.userAgent;
+     const myElement = self.document.getElementById("the_id");
+
+ In production `self` is the real window. In a test, replace it with a fake, and restore it
+ afterwards:
+     self = Fakery(self);
+     ...
+     self = Fakery.unwrap(self);
 */
 
 /*
- NOTE:
- Fakery.on(self,"document",function(a,b){return fakeDoc;});
- and
- self.onArgsDo("document",function(a,b){return fakeDoc;});
- are equivalent. I use both methods for example purposes.
+ NOTE: for a property such as "document" these two lines are the same:
+   Fakery.on(self, "document", function (fake, args) { return fakeDoc; });
+   self.onArgsDo("document", function (fake, args) { return fakeDoc; });
+ For a method name they differ. Fakery.on overrides every call to the method. onArgsDo overrides
+ reading the method itself.
  */
 
-//pretend this function is in your test code
-function test_getMyElementsSrcAttribute(){
-    //Create your Fake objects
-    var fakeDoc = Fakery(document);
+// Pretend this function is in your test code.
+function test_getMyElementsSrcAttribute() {
+    // Create the fakes.
+    const fakeDoc = Fakery(document);
     self = Fakery(self);
-    //Make "self.document" return your fakeDoc
-    Fakery.on(self,"document",function(a,b){return fakeDoc;});
-    //Make "self.document.getElementById('my-id')" return a test object
-    //but every other reference / access / method call will actually go to the REAL document object.
-    fakeDoc.getElementById.onArgsDo(["my-id"],function(fakeObject, originalArgs){ return {src:"hi.js", async:true}; });
-    /**
-     * Alternative to the line above would be to return the test object for ALL calls to getElementById
-     * fakeDoc.getElementById.onArgsDo(null, function(fakeObject, originalArgs){ return {src:"hi.js", async:true}; });
-     */
+    try {
+        // Make "self.document" return the fake document.
+        Fakery.on(self, "document", function (fake, args) { return fakeDoc; });
 
-    //now test the function
-    assertEquals("hi.js", getMyElementsSrcAttribute());
+        // Make self.document.getElementById("my-id") return a test object. Every other read and
+        // call still goes to the real document.
+        fakeDoc.getElementById.onArgsDo(["my-id"], function (fakeMethod, callArgs) {
+            return { src: "hi.js", async: true };
+        });
+        // To return the test object for every call to getElementById, use null instead:
+        // fakeDoc.getElementById.onArgsDo(null, function (fakeMethod, callArgs) { return {src: "hi.js"}; });
+
+        // Now test the function.
+        assertEquals("hi.js", getMyElementsSrcAttribute());
+        assertEquals(1, fakeDoc.getElementById.numberOfCalls(["my-id"]));
+    } finally {
+        self = Fakery.unwrap(self);
+    }
 }
-//pretend this function is in your source code
-function getMyElementsSrcAttribute(){
-    var ele = self.document.getElementById("my-id");
+
+// Pretend this function is in your source code.
+function getMyElementsSrcAttribute() {
+    const ele = self.document.getElementById("my-id");
     return ele.src;
 }
